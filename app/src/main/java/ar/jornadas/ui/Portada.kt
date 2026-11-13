@@ -16,7 +16,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 fun Portada(model: ProgramaModel) {
     var seccion by rememberSaveable { mutableStateOf("Programa") }
     var detalle by rememberSaveable { mutableStateOf<String?>(null) }
-    val charlas by model.charlas.collectAsStateWithLifecycle()
+    val uiState by model.uiState.collectAsStateWithLifecycle()
     BackHandler(detalle != null || seccion != "Programa") {
         if (detalle != null) detalle = null else seccion = "Programa"
     }
@@ -35,15 +35,23 @@ fun Portada(model: ProgramaModel) {
                 Text("Jornadas del Sur", style = MaterialTheme.typography.labelLarge)
                 if (detalle != null) {
                     TextButton(onClick = { detalle = null }) { Text("Volver") }
-                    val ficha = charlas.find { it.id == detalle }
-                    if (ficha != null) Column(Modifier.verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(ficha.titulo, style = MaterialTheme.typography.headlineMedium)
-                        Text("Día ${ficha.dia} · ${ficha.hora} · ${ficha.sala}")
-                        Text(ficha.ponente, style = MaterialTheme.typography.titleMedium)
-                        Text(ficha.resumen)
-                        Button(onClick = { model.marcar(ficha.id) }) {
-                            Text(if (ficha.favorita) "Quitar de mi agenda" else "Agregar a mi agenda")
+                    if (uiState is UiState.Cargando) {
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                    } else {
+                        val ficha = (uiState as? UiState.Programa)?.todas?.find { it.id == detalle }
+                        if (ficha != null) {
+                            Column(Modifier.verticalScroll(rememberScrollState()),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text(ficha.titulo, style = MaterialTheme.typography.headlineMedium)
+                                Text("Día ${ficha.dia} · ${ficha.hora} · ${ficha.sala}")
+                                Text(ficha.ponente, style = MaterialTheme.typography.titleMedium)
+                                Text(ficha.resumen)
+                                Button(onClick = { model.marcar(ficha.id) }) {
+                                    Text(if (ficha.favorita) "Quitar de mi agenda" else "Agregar a mi agenda")
+                                }
+                            }
+                        } else {
+                            Text("La charla seleccionada ya no existe en el catálogo.")
                         }
                     }
                 } else {
@@ -51,9 +59,26 @@ fun Portada(model: ProgramaModel) {
                     when (seccion) {
                         "Programa" -> Catalogo(model) { detalle = it }
                         "Mi agenda" -> {
-                            val guardadas = charlas.filter { it.favorita }
-                            if (guardadas.isEmpty()) Text("Todavía no agregaste charlas.")
-                            Grilla(guardadas) { detalle = it }
+                            when (val state = uiState) {
+                                is UiState.Cargando -> {
+                                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                                }
+                                is UiState.SinEdicion -> {
+                                    Text(if (state.fallo) "No se pudo consultar el programa." else "Sin edición descargada.")
+                                    OutlinedButton(onClick = model::recargar) { Text("Reintentar") }
+                                }
+                                is UiState.Programa -> {
+                                    if (state.aviso.isNotEmpty()) {
+                                        Text(state.aviso)
+                                    }
+                                    val guardadas = state.todas.filter { it.favorita }
+                                    if (guardadas.isEmpty()) {
+                                        Text("Todavía no agregaste charlas.")
+                                    } else {
+                                        Grilla(guardadas) { detalle = it }
+                                    }
+                                }
+                            }
                         }
                         else -> Mesa(model.mesa)
                     }

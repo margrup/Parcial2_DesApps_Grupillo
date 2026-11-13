@@ -13,22 +13,45 @@ import ar.jornadas.data.Charla
 
 @Composable
 fun Catalogo(model: ProgramaModel, abrir: (String) -> Unit) {
-    LaunchedEffect(Unit) { model.recargar() }
     val dia by model.dia.collectAsStateWithLifecycle()
-    var tema by remember { mutableStateOf("Todos") }
-    val fichas by model.charlas.collectAsStateWithLifecycle()
-    val aviso by model.aviso.collectAsStateWithLifecycle()
-    val cargando by model.cargando.collectAsStateWithLifecycle()
-    Selector(listOf("Ambos días", "Día 1", "Día 2"), dia) { model.dia.value = it }
+    val tema by model.tema.collectAsStateWithLifecycle()
+    val uiState by model.uiState.collectAsStateWithLifecycle()
+
     val temas = listOf("Todos", "Android", "Datos", "Calidad")
-    Selector(temas, temas.indexOf(tema)) { tema = temas[it] }
-    TextButton(onClick = model::recargar) { Text("Actualizar") }
-    if (cargando) LinearProgressIndicator(Modifier.fillMaxWidth())
-    if (aviso.isNotEmpty()) {
-        Text(aviso)
-        OutlinedButton(onClick = model::recargar) { Text("Reintentar") }
-    } else {
-        Grilla(fichas.filter { (dia == 0 || it.dia == dia) && (tema == "Todos" || it.tema == tema) }, abrir)
+    Selector(listOf("Ambos días", "Día 1", "Día 2"), dia) { model.setDia(it) }
+    Selector(temas, temas.indexOf(tema)) { model.setTema(temas[it]) }
+
+    when (val state = uiState) {
+        is UiState.Cargando -> {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+        }
+        is UiState.SinEdicion -> {
+            Text(if (state.fallo) "No se pudo consultar el programa." else "Sin edición descargada.")
+            OutlinedButton(onClick = model::recargar) {
+                Text("Reintentar")
+            }
+        }
+        is UiState.Programa -> {
+            TextButton(
+                onClick = model::recargar,
+                enabled = !state.cargando
+            ) {
+                Text("Actualizar")
+            }
+            if (state.cargando) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+            }
+            if (state.aviso.isNotEmpty()) {
+                Text(state.aviso)
+            }
+            if (state.todas.isEmpty()) {
+                Text("sin charlas programadas")
+            } else if (state.charlas.isEmpty()) {
+                Text("sin resultados para el filtro")
+            } else {
+                Grilla(state.charlas, abrir)
+            }
+        }
     }
 }
 
